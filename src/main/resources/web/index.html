@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8"/>
+<title>Pair-wise GSB · 证明库重放控制台</title>
+<style>
+  :root { --bg:#0f1420; --panel:#171e2e; --panel2:#1d263a; --line:#2a3550; --fg:#dbe3f4;
+          --muted:#8b97b3; --ax:#f2b441; --def:#4cc2ff; --lemma:#7ce09a; --bad:#ff6b6b;
+          --warn:#ffd166; --ok:#3ddc84; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:13px/1.5 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; }
+  header { padding:10px 16px; background:var(--panel); border-bottom:1px solid var(--line); display:flex; gap:12px; align-items:center; }
+  header h1 { font-size:15px; margin:0; font-weight:600; }
+  header .hint { color:var(--muted); }
+  button { background:var(--panel2); color:var(--fg); border:1px solid var(--line); border-radius:6px; padding:5px 10px; cursor:pointer; }
+  button:hover { border-color:#4a5b85; }
+  button.primary { background:#274472; border-color:#3a5f9e; }
+  button.danger { background:#5b2b33; border-color:#8a3d49; }
+  main { display:grid; grid-template-columns: 300px 1fr 380px; gap:10px; padding:10px; height:calc(100vh - 47px); }
+  .col { display:flex; flex-direction:column; gap:10px; min-height:0; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:10px; overflow:auto; }
+  .card h2 { font-size:12px; margin:0 0 8px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; }
+  .row { display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-bottom:6px; }
+  select, input { background:var(--panel2); color:var(--fg); border:1px solid var(--line); border-radius:6px; padding:5px 8px; }
+  table { width:100%; border-collapse:collapse; }
+  td, th { text-align:left; padding:3px 6px; border-bottom:1px solid var(--line); font-size:12px; vertical-align:top; }
+  th { color:var(--muted); font-weight:500; }
+  .mono { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
+  .tag { display:inline-block; padding:0 6px; border-radius:10px; font-size:11px; }
+  .tag.AXIOM { background:#4a3512; color:var(--ax); }
+  .tag.DEFINITION { background:#123b4d; color:var(--def); }
+  .tag.LEMMA { background:#173d24; color:var(--lemma); }
+  .tag.CONTENT_CHANGED { background:#4d2a2a; color:var(--bad); }
+  .tag.DEPENDENCY_CHANGED { background:#4d3f1a; color:var(--warn); }
+  .tag.MISSING_OLD_PROOF { background:#3a2450; color:#c79cff; }
+  .tag.PUBLISHED,.tag.PROVED { background:#14401f; color:var(--ok); }
+  .tag.FAILED { background:#4d1f24; color:var(--bad); }
+  .tag.frozen { background:#333c52; color:#aab6d4; }
+  #graphWrap { flex:1; min-height:300px; position:relative; }
+  svg { width:100%; height:100%; background:var(--panel2); border-radius:6px; }
+  .node rect { stroke-width:1.2; }
+  .node.AXIOM rect { fill:#2b2110; stroke:var(--ax); }
+  .node.DEFINITION rect { fill:#0f2a38; stroke:var(--def); }
+  .node.LEMMA rect { fill:#102c19; stroke:var(--lemma); }
+  .node.dim { opacity:.28; }
+  .node.affected rect { stroke-width:2.4; }
+  .node.boundary rect { stroke-dasharray:4 2; }
+  .node text { fill:var(--fg); font-size:10.5px; pointer-events:none; }
+  .edge { stroke:#556080; stroke-width:1; fill:none; }
+  .edge.parallel { stroke:#7d6bc9; stroke-dasharray:3 3; }
+  .edge.cycle { stroke:var(--bad); stroke-width:1.8; }
+  .edge.dim { opacity:.15; }
+  .legend { display:flex; gap:10px; flex-wrap:wrap; color:var(--muted); font-size:11px; margin-top:6px; }
+  .swatch { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:4px; vertical-align:-1px; }
+  pre { white-space:pre-wrap; word-break:break-word; margin:0; font-size:11px; }
+  .ev { border-bottom:1px solid var(--line); padding:5px 2px; }
+  .ev .h { display:flex; gap:8px; cursor:pointer; }
+  .ev .seq { color:var(--muted); width:42px; }
+  .ev .t { font-weight:600; }
+  .ev pre { display:none; color:var(--muted); margin-top:3px; }
+  .ev.open pre { display:block; }
+  .muted { color:var(--muted); }
+  .ok { color:var(--ok); } .bad { color:var(--bad); } .warn { color:var(--warn); }
+  textarea { width:100%; background:var(--panel2); color:var(--fg); border:1px solid var(--line); border-radius:6px; height:90px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>证明库重放控制台</h1>
+  <span class="hint">依赖图 · SCC 合法性 · 最小重放集 · 批次证据 · 不可覆盖事件</span>
+  <span style="flex:1"></span>
+  <button id="btnBoot" class="primary">导入 fixture 并生成计划</button>
+  <button id="btnVerify">校验事件哈希链</button>
+  <span id="chainState" class="muted"></span>
+</header>
+<main>
+  <div class="col">
+    <div class="card">
+      <h2>快照</h2>
+      <div class="row">
+        <select id="snapSel"></select>
+      </div>
+      <div id="snapMeta" class="mono muted" style="font-size:11px"></div>
+      <h2 style="margin-top:10px">导入快照 (JSON)</h2>
+      <textarea id="importJson" placeholder='{"library":"...","libraryVersion":"...","symbols":[...]}'></textarea>
+      <div class="row" style="margin-top:6px"><button id="btnImport">导入（按 库+指纹 幂等）</button></div>
+      <div id="importMsg" class="muted"></div>
+    </div>
+    <div class="card" style="flex:1">
+      <h2>计划</h2>
+      <div class="row">旧 <select id="oldSel"></select></div>
+      <div class="row">新 <select id="newSel"></select></div>
+      <div class="row"><input id="mapping" placeholder='rename mapping, e.g. lemma_add_comm:lemma_sum_comm' style="flex:1"/></div>
+      <div class="row"><button id="btnPlan" class="primary">生成/复用最小重放计划</button></div>
+      <select id="planSel" size="7" style="width:100%"></select>
+    </div>
+  </div>
+
+  <div class="col">
+    <div class="card" style="flex:1; display:flex; flex-direction:column">
+      <h2>依赖图 / SCC / 影响边界</h2>
+      <div id="graphWrap"><svg id="svg"></svg></div>
+      <div class="legend">
+        <span><span class="swatch" style="background:var(--ax)"></span>公理</span>
+        <span><span class="swatch" style="background:var(--def)"></span>定义</span>
+        <span><span class="swatch" style="background:var(--lemma)"></span>引理</span>
+        <span>实线=直接依赖　紫虚线=并列目标　红边=非法环</span>
+        <span>加粗=受影响　虚线框=影响边界</span>
+      </div>
+      <div id="sccList" style="margin-top:8px"></div>
+    </div>
+    <div class="card">
+      <h2>重放批次（拓扑有序，同层稳定排序）</h2>
+      <div id="batchBar" class="row"></div>
+      <div style="max-height:220px; overflow:auto"><table id="itemTable"></table></div>
+    </div>
+  </div>
+
+  <div class="col">
+    <div class="card">
+      <h2>计划操作（事件不可覆盖）</h2>
+      <div class="row">
+        <button id="btnFreeze" class="danger">冻结计划</button>
+        <span id="freezeState"></span>
+      </div>
+      <h2 style="margin-top:8px">外部公理审核</h2>
+      <div class="row">
+        <select id="axSel" style="flex:1"></select>
+        <select id="axStatus">
+          <option>UNREVIEWED</option><option>CLAIMED</option><option selected>APPROVED</option><option>REJECTED</option>
+        </select>
+      </div>
+      <div class="row"><input id="reviewer" placeholder="reviewer" value="alice"/><button id="btnReview">记录审核</button></div>
+      <div id="reviewList"></div>
+      <h2 style="margin-top:8px">失败引理切片</h2>
+      <div class="row"><select id="sliceSel" style="flex:1"></select><button id="btnSlice">缩小依赖切片</button></div>
+      <div id="sliceList"></div>
+    </div>
+    <div class="card" style="flex:1">
+      <h2>事件日志（追加式，哈希链）</h2>
+      <div id="events"></div>
+    </div>
+  </div>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const api = async (path, opts={}) => {
+  const res = await fetch(path, {headers:{'Content-Type':'application/json'}, ...opts});
+  const text = await res.text();
+  const body = text ? JSON.parse(text) : {};
+  if (!res.ok) throw new Error(body.error || (res.status+' '+path));
+  return body;
+};
+let snaps = [], plans = [], currentSnap = null, currentPlan = null, graphData = null;
+
+async function loadSnaps() {
+  const data = await api('/api/snapshots'); snaps = data.snapshots;
+  const opts = s => `<option value="${s.id}">#${s.id} ${s.library} ${s.libraryVersion} ${s.snapshotFingerprint.slice(0,8)}</option>`;
+  $('snapSel').innerHTML = snaps.map(opts).join('');
+  $('oldSel').innerHTML = snaps.map(opts).join('');
+  $('newSel').innerHTML = snaps.map(opts).join('');
+  if (snaps.length >= 2) { $('oldSel').value = snaps[snaps.length-2].id; $('newSel').value = snaps[snaps.length-1].id; }
+  if (snaps.length) await selectSnap($('snapSel').value);
+  $('btnBoot').disabled = snaps.length > 0;
+}
+async function loadPlans() {
+  const data = await api('/api/plans'); plans = data.plans;
+  $('planSel').innerHTML = plans.map(p =>
+    `<option value="${p.planId}">${p.planId.slice(0,8)} v${p.planVersion} (#${p.oldSnapshotId}→#${p.newSnapshotId}) ${p.frozen?'FROZEN':''} items=${p.items.length}</option>`).join('');
+  if (currentPlan && plans.find(p=>p.planId===currentPlan.planId)) await selectPlan(currentPlan.planId);
+  else if (plans.length) await selectPlan(plans[plans.length-1].planId);
+  else { currentPlan=null; renderBatches(); renderAxes(); }
+}
+async function selectSnap(id) {
+  currentSnap = await api('/api/snapshots/'+id); graphData = currentSnap.graph;
+  $('snapMeta').textContent = `${currentSnap.library}@${currentSnap.libraryVersion}\nfp ${currentSnap.snapshotFingerprint}\n${currentSnap.symbols.length} symbols`;
+  drawGraph(); renderSccs();
+}
+async function selectPlan(pid) {
+  currentPlan = await api('/api/plans/'+pid);
+  $('newSel').value = currentPlan.newSnapshotId;
+  $('oldSel').value = currentPlan.oldSnapshotId;
+  const s = snaps.find(x=>x.id===currentPlan.newSnapshotId);
+  if (s) { $('snapSel').value = s.id; await selectSnap(s.id); }
+  drawGraph(); renderBatches(); renderAxes(); renderReviews(); renderSlices(); renderFreeze();
+}
+function drawGraph() {
+  if (!graphData) return;
+  const svg = $('svg'); svg.innerHTML='';
+  const nodes = graphData.nodes, edges = graphData.edges;
+  const idx = new Map(nodes.map((n,i)=>[n.fqn,i]));
+  const kinds = [...new Set(nodes.map(n=>n.kind))];
+  const layerCount = kinds.length;
+  const colW = 1/3, W=svg.clientWidth||760, H=Math.max(360, nodes.length*30+40);
+  svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
+  const pos = new Map();
+  const buckets = {AXIOM:[], DEFINITION:[], LEMMA:[]};
+  nodes.forEach(n=>buckets[n.kind].push(n));
+  Object.entries(buckets).forEach(([k,arr],ci)=>{
+    arr.sort((a,b)=>a.ord-b.ord||a.fqn.localeCompare(b.fqn));
+    arr.forEach((n,i)=>pos.set(n.fqn,{x:24+ci*(W/3), y:24+i*((H-48)/Math.max(1,arr.length-1||1))}));
+  });
+  const affected = new Set(currentPlan ? currentPlan.affectedLemmas : []);
+  const boundary = new Set(currentPlan ? currentPlan.boundary : []);
+  const illegal = new Set();
+  (currentSnap ? currentSnap.illegalSccs : []).forEach(c=>c.members.forEach(m=>illegal.add(m)));
+  const cycEdges = new Set();
+  (currentSnap ? currentSnap.illegalSccs : []).forEach(c=>{
+    c.members.forEach((m,i)=>{ const n=c.members[(i+1)%c.members.length]; cycEdges.add(m+'->'+n); });
+  });
+  const ns='http://www.w3.org/2000/svg';
+  const edgeG = document.createElementNS(ns,'g');
+  edges.forEach(e=>{
+    const a=pos.get(e.from), b=pos.get(e.to); if(!a||!b) return;
+    const p=document.createElementNS(ns,'path');
+    const mx=(a.x+b.x)/2;
+    p.setAttribute('d',`M${a.x},${a.y} C ${mx},${a.y} ${mx},${b.y} ${b.x+110},${b.y}`);
+    p.setAttribute('class','edge'+(cycEdges.has(e.to+'->'+e.from)||cycEdges.has(e.from+'->'+e.to)?' cycle':''));
+    if (currentPlan && !(affected.has(e.from)&&affected.has(e.to))) p.classList.add('dim');
+    edgeG.appendChild(p);
+  });
+  svg.appendChild(edgeG);
+  nodes.forEach(n=>{
+    const p=pos.get(n.fqn);
+    const g=document.createElementNS(ns,'g');
+    g.setAttribute('class',`node ${n.kind} ${affected.has(n.fqn)?'affected':''} ${boundary.has(n.fqn)?'boundary':''}`);
+    g.setAttribute('transform',`translate(${p.x},${p.y})`);
+    const r=document.createElementNS(ns,'rect'); r.setAttribute('x',0);r.setAttribute('y',-11);
+    r.setAttribute('width',150);r.setAttribute('height',22);r.setAttribute('rx',6);
+    const t=document.createElementNS(ns,'text'); t.setAttribute('x',7);t.setAttribute('y',4);
+    t.textContent=n.fqn;
+    g.appendChild(r);g.appendChild(t);
+    g.querySelector('rect');
+    if (!affected.size || n.kind!=='LEMMA' || affected.has(n.fqn) || currentPlan && currentPlan.docOnly.includes(n.fqn)) {}
+    else g.classList.add('dim');
+    svg.appendChild(g);
+  });
+}
+function renderSccs() {
+  if (!currentSnap) return;
+  $('sccList').innerHTML = currentSnap.sccs.filter(c=>c.members.length>1).map(c=>
+    `<div class="mono" style="font-size:11px"><span class="${c.legalRecursion?'ok':'bad'}">${c.legalRecursion?'合法递归环':'非法环'}</span>
+     SCC#${c.id} {${c.members.join(', ')}} — <span class="muted">${c.reason}</span></div>`).join('')
+     || '<div class="muted" style="font-size:11px">无多节点 SCC（定义递归环会显示为合法）</div>';
+  const bad = currentSnap.illegalSccs.length;
+  $('sccList').insertAdjacentHTML('afterbegin',
+     bad ? `<div class="bad" style="font-size:12px">该快照含 ${bad} 个非法证明环，重放计划不应基于它生成</div>` :
+           `<div class="ok" style="font-size:12px">快照环检查通过</div>`);
+}
+const reasonTag = r => `<span class="tag ${r}">${r}</span>`;
+async function renderBatches() {
+  const bar=$('batchBar'); const tbl=$('itemTable');
+  if (!currentPlan) { bar.innerHTML='<span class="muted">尚无计划</span>'; tbl.innerHTML=''; return; }
+  bar.innerHTML = currentPlan.layers.map((l,i)=>
+    `<button data-b="${i}">批次 ${i}（${l.length}）</button>`).join('')
+    + `<span class="muted">共 ${currentPlan.items.length} 个引理；内容变化 ${currentPlan.items.filter(x=>x.reason==='CONTENT_CHANGED').length}，依赖变化 ${currentPlan.items.filter(x=>x.reason==='DEPENDENCY_CHANGED').length}，旧证明缺少 ${currentPlan.items.filter(x=>x.reason==='MISSING_OLD_PROOF').length}</span>`;
+  bar.querySelectorAll('button').forEach(b=>b.onclick=()=>replay(+b.dataset.b, []));
+  tbl.innerHTML = `<tr><th>层/批</th><th>引理</th><th>进入原因</th><th>触发证据</th></tr>` +
+    currentPlan.items.map(it=>`<tr><td>${it.batch}</td><td class="mono">${it.fqn}</td>
+      <td>${reasonTag(it.reason)}</td><td class="mono muted" style="font-size:10.5px">${(it.triggeredBy||[]).join('<br>')}</td></tr>`).join('');
+  const batches = await api(`/api/plans/${currentPlan.planId}/batches`);
+  const status = new Map(batches.batches.map(b=>[b.batch,b.status]));
+  bar.querySelectorAll('button').forEach(b=>{ if(status.get(+b.dataset.b)==='PUBLISHED') b.classList.add('ok'); });
+}
+async function replay(batch, force) {
+  try {
+    const r = await api(`/api/plans/${currentPlan.planId}/replay`, {method:'POST',
+      body: JSON.stringify({planVersion:currentPlan.planVersion, batch, forceFailures:force, recordedBy:'web-ui'})});
+    const failed = (r.results||[]).filter(x=>x.status==='FAILED');
+    if (failed.length) {
+      const f = failed.map(x=>x.fqn);
+      alert(`批次 ${batch} 整体未发布。失败：${f.join(', ')}\n可对失败引理“缩小依赖切片”。\n重试时可强制失败集合为空。`);
+      const again = prompt('输入要强制失败的 fqn（逗号分隔，留空表示正常重放并重试发布）', f.join(','));
+      if (again !== null) await replay(batch, again.split(',').map(s=>s.trim()).filter(Boolean));
+    } else {
+      alert(`批次 ${batch} 已发布，证据已保存（eventSeq=${r.eventSeq}）`);
+    }
+    await selectPlan(currentPlan.planId); await loadEvents();
+  } catch(e) { alert(e.message); }
+}
+function renderFreeze() {
+  if (!currentPlan) { $('freezeState').textContent=''; return; }
+  $('freezeState').innerHTML = currentPlan.frozen ? '<span class="tag frozen">FROZEN</span>' : '<span class="muted">可重放</span>';
+  $('btnFreeze').disabled = currentPlan.frozen;
+}
+function renderAxes() {
+  if (!currentPlan) { $('axSel').innerHTML=''; return; }
+  const ext = currentPlan.changedSeeds.filter(s=>s.kind==='AXIOM');
+  $('axSel').innerHTML = ext.length
+    ? ext.map(s=>`<option>${s.fqn}</option>`).join('')
+    : '<option value="">（本计划无变更公理；可对新快照外部公理直接审核）</option>';
+}
+async function renderReviews() {
+  if (!currentPlan) return;
+  const d = await api(`/api/plans/${currentPlan.planId}/reviews`);
+  $('reviewList').innerHTML = d.reviews.map(r=>
+    `<div class="mono" style="font-size:11px">${r.axiomFqn} <span class="tag ${r.status==='APPROVED'?'PUBLISHED':r.status==='REJECTED'?'FAILED':''}">${r.status}</span> ${r.reviewer} <span class="muted">@ev${r.eventSeq}</span></div>`).join('');
+}
+async function renderSlices() {
+  if (!currentPlan) return;
+  const d = await api(`/api/plans/${currentPlan.planId}/slices`);
+  $('sliceList').innerHTML = d.slices.map(s=>
+    `<div class="mono" style="font-size:11px"><b>${s.lemmaFqn}</b> @ev${s.eventSeq}<br><span class="muted">slice(${s.sliceFqns.length}): ${s.sliceFqns.join(', ')}</span></div>`).join('');
+  const sels = $('sliceSel');
+  const failed = new Set();
+  (await api(`/api/plans/${currentPlan.planId}/batches`)).batches.forEach(b=>
+    (b.evidence.results||[]).forEach(r=>{ if(r.status==='FAILED') failed.add(r.fqn); }));
+  sels.innerHTML = [...failed].map(f=>`<option>${f}</option>`).join('')
+    || '<option value="">（需要先有失败引理）</option>';
+}
+async function loadEvents() {
+  const d = await api('/api/events');
+  $('events').innerHTML = d.events.map(e=>
+    `<div class="ev"><div class="h"><span class="seq mono">#${e.seq}</span><span class="t">${e.eventType}</span>
+     <span class="muted" style="margin-left:auto">${e.hash.slice(0,10)}</span></div><pre>${JSON.stringify(e.payload,null,1)}</pre></div>`).join('')
+    || '<div class="muted">无事件</div>';
+  $('events').querySelectorAll('.ev .h').forEach(h=>h.onclick=()=>h.parentElement.classList.toggle('open'));
+}
+$('snapSel').onchange = e=>selectSnap(e.target.value);
+$('planSel').onchange = e=>selectPlan(e.target.value);
+$('btnImport').onclick = async ()=>{
+  try {
+    const body = JSON.parse($('importJson').value);
+    const r = await api('/api/snapshots/import',{method:'POST',body:JSON.stringify(body)});
+    $('importMsg').innerHTML = r.idempotent
+      ? `<span class="muted">幂等命中：已存在快照 #${r.snapshot.id}（库+内容指纹相同）</span>`
+      : `<span class="ok">已导入 #${r.snapshot.id}，非法环=${r.snapshot.illegalSccs.length}</span>`;
+    await loadSnaps();
+  } catch(e){ $('importMsg').innerHTML = `<span class="bad">${e.message}</span>`; }
+};
+$('btnPlan').onclick = async ()=>{
+  try {
+    const mapping = {};
+    $('mapping').value.split(',').map(s=>s.trim()).filter(Boolean).forEach(pair=>{
+      const [a,b]=pair.split(':').map(x=>x&&x.trim()); if(a&&b)mapping[a]=b;
+    });
+    const r = await api('/api/plans',{method:'POST',body:JSON.stringify({
+      oldSnapshotId:+$('oldSel').value, newSnapshotId:+$('newSel').value, mapping})});
+    await loadPlans(); await selectPlan(r.planId); await loadEvents();
+  } catch(e){ alert(e.message); }
+};
+$('btnFreeze').onclick = async ()=>{
+  try {
+    await api(`/api/plans/${currentPlan.planId}/freeze`,{method:'POST',
+      body:JSON.stringify({planVersion:currentPlan.planVersion, note:'frozen from web UI'})});
+    await loadPlans(); await loadEvents();
+  } catch(e){ alert(e.message); }
+};
+$('btnReview').onclick = async ()=>{
+  try {
+    await api(`/api/plans/${currentPlan.planId}/reviews`,{method:'POST',body:JSON.stringify({
+      axiomFqn:$('axSel').value, status:$('axStatus').value, reviewer:$('reviewer').value, note:''})});
+    await renderReviews(); await loadEvents();
+  } catch(e){ alert(e.message); }
+};
+$('btnSlice').onclick = async ()=>{
+  try {
+    if(!$('sliceSel').value) return;
+    await api(`/api/plans/${currentPlan.planId}/slices`,{method:'POST',
+      body:JSON.stringify({lemmaFqn:$('sliceSel').value, note:'narrowed from web UI'})});
+    await renderSlices(); await loadEvents();
+  } catch(e){ alert(e.message); }
+};
+$('btnBoot').onclick = async ()=>{
+  try { const r = await api('/api/demo/bootstrap',{method:'POST'});
+    await loadSnaps(); await loadPlans(); await loadEvents();
+    console.log(r);
+  } catch(e){ alert(e.message); }
+};
+$('btnVerify').onclick = async ()=>{
+  try { const r = await api('/api/events/verify',{method:'POST'});
+    $('chainState').innerHTML = r.valid ? '<span class="ok">哈希链完整</span>' : '<span class="bad">损坏</span>';
+  } catch(e){ $('chainState').innerHTML = `<span class="bad">${e.message}</span>`; }
+};
+(async function init(){
+  $('importJson').value = '';
+  await loadSnaps(); await loadPlans(); await loadEvents();
+})();
+</script></body></html>

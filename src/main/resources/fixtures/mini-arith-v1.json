@@ -1,0 +1,90 @@
+{
+  "library": "mini-arith",
+  "libraryVersion": "v1",
+  "symbols": [
+    {
+      "fqn": "ax_zero", "kind": "AXIOM",
+      "contentFingerprint": "fp-ax-zero-1", "docFingerprint": "doc-ax-zero-1",
+      "directDeps": [], "parallelGoals": [], "checkStatus": "TRUSTED",
+      "proofRef": null, "external": false
+    },
+    {
+      "fqn": "ax_succ_inj", "kind": "AXIOM",
+      "contentFingerprint": "fp-ax-succ-inj-1", "docFingerprint": "doc-ax-succ-inj-1",
+      "directDeps": [], "parallelGoals": [], "checkStatus": "TRUSTED",
+      "proofRef": null, "external": false
+    },
+    {
+      "fqn": "ax_induct", "kind": "AXIOM",
+      "contentFingerprint": "fp-ax-induct-1", "docFingerprint": "doc-ax-induct-1",
+      "directDeps": ["ax_zero"], "parallelGoals": [], "checkStatus": "TRUSTED",
+      "proofRef": null, "external": false
+    },
+    {
+      "fqn": "ax_omit_ext", "kind": "AXIOM",
+      "contentFingerprint": "fp-ax-ext-1", "docFingerprint": "doc-ax-ext-1",
+      "directDeps": [], "parallelGoals": [], "checkStatus": "IMPORTED",
+      "proofRef": null, "external": true
+    },
+    {
+      "fqn": "def_nat", "kind": "DEFINITION",
+      "contentFingerprint": "fp-def-nat-1", "docFingerprint": "doc-def-nat-1",
+      "directDeps": ["ax_zero", "ax_succ_inj"], "parallelGoals": [], "checkStatus": "CHECKED",
+      "proofRef": "proof:def_nat", "external": false
+    },
+    {
+      "fqn": "def_even", "kind": "DEFINITION",
+      "contentFingerprint": "fp-def-even-1", "docFingerprint": "doc-def-even-1",
+      "directDeps": ["def_nat", "def_odd"], "parallelGoals": ["def_odd"], "checkStatus": "CHECKED",
+      "proofRef": "proof:def_even", "external": false
+    },
+    {
+      "fqn": "def_odd", "kind": "DEFINITION",
+      "contentFingerprint": "fp-def-odd-1", "docFingerprint": "doc-def-odd-1",
+      "directDeps": ["def_nat", "def_even"], "parallelGoals": ["def_even"], "checkStatus": "CHECKED",
+      "proofRef": "proof:def_odd", "external": false
+    },
+    {
+      "fqn": "lemma_zero_nat", "kind": "LEMMA",
+      "contentFingerprint": "fp-lemma-zero-nat-1", "docFingerprint": "doc-lemma-zero-nat-1",
+      "directDeps": ["def_nat", "ax_zero"], "parallelGoals": [], "checkStatus": "PROVED",
+      "proofRef": "proof:lemma_zero_nat", "external": false
+    },
+    {
+      "fqn": "lemma_succ_inj", "kind": "LEMMA",
+      "contentFingerprint": "fp-lemma-succ-inj-1", "docFingerprint": "doc-lemma-succ-inj-1",
+      "directDeps": ["def_nat", "ax_succ_inj", "lemma_zero_nat"], "parallelGoals": [],
+      "checkStatus": "PROVED", "proofRef": "proof:lemma_succ_inj", "external": false
+    },
+    {
+      "fqn": "lemma_even_zero", "kind": "LEMMA",
+      "contentFingerprint": "fp-lemma-even-zero-1", "docFingerprint": "doc-lemma-even-zero-1",
+      "directDeps": ["def_even", "ax_induct", "lemma_zero_nat"], "parallelGoals": [],
+      "checkStatus": "PROVED", "proofRef": "proof:lemma_even_zero", "external": false
+    },
+    {
+      "fqn": "lemma_odd_one", "kind": "LEMMA",
+      "contentFingerprint": "fp-lemma-odd-one-1", "docFingerprint": "doc-lemma-odd-one-1",
+      "directDeps": ["def_odd", "lemma_even_zero", "lemma_succ_inj"], "parallelGoals": ["lemma_even_zero"],
+      "checkStatus": "PROVED", "proofRef": "proof:lemma_odd_one", "external": false
+    },
+    {
+      "fqn": "lemma_add_comm", "kind": "LEMMA",
+      "contentFingerprint": "fp-lemma-sum-comm-1", "docFingerprint": "doc-lemma-add-comm-1",
+      "directDeps": ["def_nat", "ax_succ_inj", "lemma_succ_inj"], "parallelGoals": [],
+      "checkStatus": "PROVED", "proofRef": "proof:lemma_add_comm", "external": false
+    },
+    {
+      "fqn": "lemma_stable", "kind": "LEMMA",
+      "contentFingerprint": "fp-lemma-stable-1", "docFingerprint": "doc-lemma-stable-1",
+      "directDeps": ["ax_zero", "def_nat"], "parallelGoals": [],
+      "checkStatus": "PROVED", "proofRef": "proof:lemma_stable", "external": false
+    },
+    {
+      "fqn": "lemma_doc_only", "kind": "LEMMA",
+      "contentFingerprint": "fp-lemma-doc-only-1", "docFingerprint": "doc-lemma-doc-only-1",
+      "directDeps": ["def_nat"], "parallelGoals": [],
+      "checkStatus": "PROVED", "proofRef": "proof:lemma_doc_only", "external": false
+    }
+  ]
+}

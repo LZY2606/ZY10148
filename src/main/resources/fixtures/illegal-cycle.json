@@ -1,0 +1,24 @@
+{
+  "library": "mini-arith",
+  "libraryVersion": "broken",
+  "symbols": [
+    {
+      "fqn": "ax_one", "kind": "AXIOM",
+      "contentFingerprint": "fp-ax-one", "docFingerprint": "",
+      "directDeps": [], "parallelGoals": [], "checkStatus": "TRUSTED",
+      "proofRef": null, "external": false
+    },
+    {
+      "fqn": "lemma_a", "kind": "LEMMA",
+      "contentFingerprint": "fp-la", "docFingerprint": "",
+      "directDeps": ["ax_one", "lemma_b"], "parallelGoals": [],
+      "checkStatus": "PROVED", "proofRef": "proof:a", "external": false
+    },
+    {
+      "fqn": "lemma_b", "kind": "LEMMA",
+      "contentFingerprint": "fp-lb", "docFingerprint": "",
+      "directDeps": ["lemma_a"], "parallelGoals": [],
+      "checkStatus": "PROVED", "proofRef": "proof:b", "external": false
+    }
+  ]
+}
