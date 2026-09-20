@@ -1,0 +1,36 @@
+{
+  "library": "tiny-arith-bad",
+  "version": "v1",
+  "symbols": [
+    {
+      "id": "nat",
+      "kind": "DEFINITION",
+      "library": "tiny-arith-bad",
+      "version": "v1",
+      "fingerprint": "bad000000001",
+      "content": "Inductive nat : Type := | O | S (n : nat).",
+      "doc": "Natural numbers.",
+      "dependencies": []
+    },
+    {
+      "id": "loop_a",
+      "kind": "LEMMA",
+      "library": "tiny-arith-bad",
+      "version": "v1",
+      "fingerprint": "bad000000002",
+      "content": "Lemma loop_a : True. Proof. exact loop_b. Qed.",
+      "doc": "Undeclared proof cycle via another theorem: must be rejected.",
+      "dependencies": ["loop_b"]
+    },
+    {
+      "id": "loop_b",
+      "kind": "LEMMA",
+      "library": "tiny-arith-bad",
+      "version": "v1",
+      "fingerprint": "bad000000003",
+      "content": "Lemma loop_b : True. Proof. exact loop_a. Qed.",
+      "doc": "Undeclared proof cycle via another theorem: must be rejected.",
+      "dependencies": ["loop_a"]
+    }
+  ]
+}

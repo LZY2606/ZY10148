@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Proof Replay · 证明库快照影响分析</title>
+<style>
+  :root {
+    --bg: #0f1420; --panel: #181f2e; --panel2: #1f2839; --line: #2b3648;
+    --text: #e6ebf2; --muted: #93a1b5; --accent: #5b9dff; --ok: #3fb96b;
+    --warn: #e8a33d; --err: #e5534b; --purple: #b083f0; --cyan: #3fc6c6;
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text);
+    font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif; }
+  header { padding:16px 24px; border-bottom:1px solid var(--line); display:flex; align-items:baseline; gap:14px; }
+  header h1 { font-size:18px; margin:0; }
+  header .sub { color:var(--muted); font-size:12.5px; }
+  main { display:grid; grid-template-columns: 340px 1fr; gap:16px; padding:16px 24px; }
+  .col { display:flex; flex-direction:column; gap:14px; min-width:0; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px; }
+  .card h2 { font-size:13px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:0 0 10px; }
+  select,button,input { font:inherit; }
+  select,input { background:var(--panel2); color:var(--text); border:1px solid var(--line); border-radius:6px; padding:6px 8px; width:100%; }
+  button { background:var(--accent); color:#08111f; border:0; border-radius:6px; padding:7px 12px; font-weight:600; cursor:pointer; }
+  button.ghost { background:var(--panel2); color:var(--text); border:1px solid var(--line); }
+  button:disabled { opacity:.45; cursor:not-allowed; }
+  .row { display:flex; gap:8px; align-items:center; }
+  .row > * { flex:1; }
+  .row > button { flex:0 0 auto; }
+  .muted { color:var(--muted); font-size:12px; }
+  .pill { display:inline-block; padding:1px 8px; border-radius:99px; font-size:11px; font-weight:700; }
+  .pill.AXIOM { background:#3a2c4d; color:var(--purple); }
+  .pill.DEFINITION { background:#14363a; color:var(--cyan); }
+  .pill.LEMMA { background:#17314d; color:var(--accent); }
+  .pill.CONTENT { background:#43251f; color:var(--err); }
+  .pill.DEPENDENCY { background:#42351a; color:var(--warn); }
+  .pill.MISSING_PROOF { background:#1f3a28; color:var(--ok); }
+  .pill.PROVED,.pill.APPROVED { background:#1f3a28; color:var(--ok); }
+  .pill.FAILED,.pill.REJECTED { background:#43251f; color:var(--err); }
+  .pill.PENDING { background:var(--panel2); color:var(--muted); }
+  .pill.frozen { background:#2a3447; color:#c7d3e3; }
+  table { width:100%; border-collapse:collapse; font-size:12.5px; }
+  th,td { text-align:left; padding:5px 7px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--muted); font-weight:600; }
+  tr.entry:hover { background:var(--panel2); }
+  #graphWrap { background:var(--panel2); border:1px solid var(--line); border-radius:8px; overflow:auto; }
+  svg { display:block; }
+  .node rect { stroke-width:1.5; }
+  .node text { fill:var(--text); font-size:11px; pointer-events:none; }
+  .node.AXIOM rect { fill:#241a33; stroke:var(--purple); }
+  .node.DEFINITION rect { fill:#102b2e; stroke:var(--cyan); }
+  .node.LEMMA rect { fill:#132640; stroke:var(--accent); }
+  .node.changed rect { stroke-width:3; }
+  .node.affected rect { filter: brightness(1.25); }
+  .node.dimmed { opacity:.28; }
+  .edge { stroke:#3a475c; stroke-width:1.2; fill:none; marker-end:url(#arrow); }
+  .edge.hot { stroke:var(--warn); stroke-width:2; }
+  .legend { display:flex; flex-wrap:wrap; gap:10px; font-size:11.5px; color:var(--muted); margin-top:8px; }
+  .legend i { display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:4px; }
+  .toast { position:fixed; right:20px; bottom:20px; max-width:420px; z-index:50; display:flex; flex-direction:column; gap:8px; }
+  .toast div { padding:10px 14px; border-radius:8px; box-shadow:0 6px 20px rgba(0,0,0,.4); font-size:13px; }
+  .toast .ok { background:#143825; border:1px solid var(--ok); }
+  .toast .bad { background:#3d1d1b; border:1px solid var(--err); }
+  .tabs { display:flex; gap:6px; margin-bottom:10px; }
+  .tabs button { background:var(--panel2); color:var(--muted); }
+  .tabs button.active { background:var(--accent); color:#08111f; }
+  pre { white-space:pre-wrap; word-break:break-word; background:var(--panel2); border:1px solid var(--line); border-radius:6px; padding:8px; margin:4px 0 0; max-height:160px; overflow:auto; font-size:11.5px; }
+  .scroll { max-height:300px; overflow:auto; }
+  details summary { cursor:pointer; color:var(--muted); font-size:12px; }
+  .mono { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+  .ok-text { color:var(--ok); } .err-text { color:var(--err); } .warn-text { color:var(--warn); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Proof Replay</h1>
+  <span class="sub">证明库快照比较 · 影响传播 · 最小重放计划 · 不可覆盖事件日志</span>
+</header>
+<main>
+  <div class="col">
+    <div class="card">
+      <h2>1 · 快照导入（幂等）</h2>
+      <div class="row">
+        <select id="fixtureSel"></select>
+        <button onclick="loadFixture()">载入 fixture</button>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <select id="fromSnap"></select>
+        <span class="muted">旧</span>
+      </div>
+      <div class="row" style="margin-top:6px">
+        <select id="toSnap"></select>
+        <span class="muted">新</span>
+      </div>
+      <details style="margin-top:8px"><summary>改名 mapping（oldId → newId，仅显式声明才传递）</summary>
+        <textarea id="mappingInput" rows="3" style="width:100%;background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:6px;margin-top:6px;padding:6px">{"add_zero":"add_zero_rw"}</textarea>
+      </details>
+      <button style="width:100%;margin-top:10px" onclick="createPlan()">比较并生成最小重放计划</button>
+      <div id="importMsg" class="muted" style="margin-top:8px"></div>
+    </div>
+
+    <div class="card">
+      <h2>2 · 计划与版本</h2>
+      <div class="row">
+        <select id="planSel" onchange="renderCurrent()"></select>
+        <select id="versionSel" onchange="renderVersion()"></select>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button class="ghost" onclick="freezePlan()">冻结当前版本</button>
+      </div>
+      <div id="summary" style="margin-top:10px"></div>
+    </div>
+
+    <div class="card">
+      <h2>3 · 外部公理审核</h2>
+      <div id="audits" class="scroll"></div>
+    </div>
+  </div>
+
+  <div class="col">
+    <div class="card">
+      <div class="tabs">
+        <button class="active" data-tab="graph" onclick="switchTab('graph')">依赖图 / SCC</button>
+        <button data-tab="plan" onclick="switchTab('plan')">重放批次</button>
+        <button data-tab="events" onclick="switchTab('events')">事件日志</button>
+      </div>
+      <div id="tab-graph">
+        <div class="row">
+          <span class="muted">查看快照</span>
+          <select id="graphSnap" onchange="drawGraph();renderAudits()"></select>
+        </div>
+        <div id="graphWrap" style="margin-top:10px"></div>
+        <div class="legend">
+          <span><i style="background:var(--purple)"></i>AXIOM</span>
+          <span><i style="background:var(--cyan)"></i>DEFINITION</span>
+          <span><i style="background:var(--accent)"></i>LEMMA</span>
+          <span><i style="background:var(--warn)"></i>变化/影响边界（粗框）</span>
+          <span><i style="background:#3a475c"></i>依赖边</span>
+        </div>
+        <div id="sccInfo" class="muted" style="margin-top:8px"></div>
+      </div>
+      <div id="tab-plan" style="display:none">
+        <div id="planArea"></div>
+      </div>
+      <div id="tab-events" style="display:none">
+        <div class="row"><span class="muted">事件按 seq 单调追加，永不覆盖</span>
+          <button class="ghost" style="flex:0 0 auto" onclick="loadEvents()">刷新</button></div>
+        <div id="eventsArea" class="scroll" style="margin-top:8px"></div>
+      </div>
+    </div>
+  </div>
+</main>
+<div class="toast" id="toast"></div>
+<script>
+const $ = id => document.getElementById(id);
+let snapshots = [], plans = [], currentPlan = null, currentStatus = null, currentGraph = null;
+const fixtures = ["arith-v1.json","arith-v2.json","bad-lemma-cycle.json"];
+$("fixtureSel").innerHTML = fixtures.map(f=>`<option>${f}</option>`).join("");
+
+function toast(msg, ok=true) {
+  const el = document.createElement("div");
+  el.className = ok ? "ok" : "bad";
+  el.textContent = msg;
+  $("toast").appendChild(el);
+  setTimeout(()=>el.remove(), 6000);
+}
+async function api(path, opts={}) {
+  const res = await fetch(path, Object.assign({
+    headers:{"Content-Type":"application/json"},
+  }, opts));
+  const text = await res.text();
+  const data = text ? JSON.parse(text) : {};
+  if (!res.ok) throw new Error(data.error || ("HTTP "+res.status));
+  return data;
+}
+function short(fp,n=10){ return (fp||"").slice(0,n)+"…"; }
+function esc(s){ return String(s).replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+async function refresh() {
+  snapshots = await api("/api/snapshots");
+  const opts = snapshots.map(s=>
+    `<option value="${s.snapshotFingerprint}">${s.library} @ ${s.version} (${short(s.snapshotFingerprint,8)})</option>`).join("");
+  $("fromSnap").innerHTML = opts; $("toSnap").innerHTML = opts; $("graphSnap").innerHTML = opts;
+  if (snapshots.length >= 2) {
+    $("fromSnap").selectedIndex = snapshots.findIndex(s=>s.version==="v1") >= 0
+      ? snapshots.findIndex(s=>s.version==="v1") : 0;
+    const v2 = snapshots.findIndex(s=>s.version==="v2");
+    if (v2 >= 0) $("toSnap").selectedIndex = v2;
+  }
+  plans = await api("/api/plans");
+  $("planSel").innerHTML = plans.map(p=>`<option value="${p.planId}">${p.planId} · ${p.library}</option>`).join("");
+  await renderCurrent();
+  await drawGraph();
+}
+
+async function loadFixture() {
+  try {
+    const data = await api("/api/snapshots/load-fixture", {method:"POST",
+      body: JSON.stringify({resource: $("fixtureSel").value})});
+    $("importMsg").innerHTML = `${data.created ? "已导入" : "已存在（幂等返回）"}:
+      <b>${data.snapshot.library} @ ${data.snapshot.version}</b><br>
+      snapshot fp <span class="mono">${short(data.snapshot.snapshotFingerprint,18)}</span>`;
+    await refresh();
+    toast("fixture 处理完成");
+  } catch(e) { toast(e.message, false); $("importMsg").innerHTML = `<span class="err-text">${esc(e.message)}</span>`; }
+}
+
+async function createPlan() {
+  try {
+    const renameMapping = JSON.parse($("mappingInput").value || "{}");
+    const from = snapshots[$("fromSnap").selectedIndex], to = snapshots[$("toSnap").selectedIndex];
+    const v = await api("/api/plans", {method:"POST", body: JSON.stringify({
+      library: to.library, fromSnapshot: from.snapshotFingerprint,
+      toSnapshot: to.snapshotFingerprint, renameMapping})});
+    await refresh();
+    $("planSel").value = v.planId;
+    await renderCurrent();
+    toast("计划已创建: " + v.planId + " v" + v.version);
+  } catch(e) { toast(e.message, false); }
+}
+
+async function renderCurrent() {
+  if (!plans.length) { $("summary").innerHTML='<span class="muted">尚无计划</span>';
+    $("versionSel").innerHTML=""; $("planArea").innerHTML=""; $("audits").innerHTML=""; return; }
+  const planId = $("planSel").value || plans[0].planId;
+  currentPlan = plans.find(p=>p.planId===planId);
+  $("planSel").value = planId;
+  $("versionSel").innerHTML = currentPlan.versions.map(v=>
+    `<option value="${v.version}">v${v.version}${v.frozen?" 🔒":""} · ${v.entries.length} 条</option>`).join("");
+  $("versionSel").value = String(currentPlan.currentVersion);
+  await renderVersion();
+  renderAudits();
+}
+
+async function renderVersion() {
+  if (!currentPlan) return;
+  const version = Number($("versionSel").value);
+  currentStatus = await api(`/api/plans/${currentPlan.planId}?version=${version}`);
+  const v = currentStatus;
+  $("summary").innerHTML = `
+    <div class="muted">${currentPlan.planId} · 版本 ${v.version}${v.parentVersion?` (继承自 v${v.parentVersion})`:""}
+      ${v.frozen?'<span class="pill frozen">FROZEN</span>':""}</div>
+    <table style="margin-top:6px">
+      <tr><th>变化/边界种子</th><td>${v.changedSymbols.length ? v.changedSymbols.map(x=>`<span class="warn-text">${esc(x)}</span>`).join(", ") : "（无）"}</td></tr>
+      <tr><th>重放定理</th><td>${v.entries.length} 个（按拓扑层）</td></tr>
+      <tr><th>消失符号（留档）</th><td>${v.deletedSymbols.length ? v.deletedSymbols.join(", ") : "（无）"}</td></tr>
+    </table>`;
+  await renderPlanTable();
+  drawGraph();
+}
+function switchTab(tab) {
+  document.querySelectorAll(".tabs button").forEach(b=>b.classList.toggle("active", b.dataset.tab===tab));
+  ["graph","plan","events"].forEach(t=>$("tab-"+t).style.display = t===tab ? "" : "none");
+  if (tab==="events") loadEvents();
+}
+
+async function renderPlanTable() {
+  const v = currentStatus;
+  const batches = await api(`/api/plans/${currentPlan.planId}/batches`);
+  const layers = [...new Set(v.entries.map(e=>e.layer))].sort((a,b)=>a-b);
+  let html = `<p class="muted">最小性：未列出的引理指纹未变且（传递）依赖未变，旧证明仍然成立。证据中的 usedDependencies 必须与声明切片精确一致；整层一起提交，失败则整体不发布。</p>`;
+  for (const layer of layers) {
+    const entries = v.entries.filter(e=>e.layer===layer);
+    const statuses = entries.map(e=>e.status);
+    const done = statuses.every(s=>s==="PROVED");
+    const anyResult = statuses.some(s=>s!=="PENDING");
+    html += `<div style="margin-bottom:14px">
+      <div class="row" style="margin-bottom:6px">
+        <b>拓扑层 ${layer}</b>
+        <span class="muted">${done ? "✔ 已全部证明" : anyResult ? "已有结果" : "待重放"}</span>
+        <button class="ghost" style="flex:0 0 auto" ${v.frozen||anyResult?"disabled":""}
+          onclick="submitLayer(${layer}, 'PROVED')">整层 PROVED</button>
+        <button class="ghost" style="flex:0 0 auto" ${v.frozen||anyResult?"disabled":""}
+          onclick="submitLayer(${layer}, 'FAILED')">整层 FAILED</button>
+      </div>
+      <table><thead><tr><th>定理</th><th>进入原因</th><th>切片依赖</th><th>状态</th><th>失败后操作</th></tr></thead><tbody>`;
+    for (const e of entries) {
+      html += `<tr class="entry">
+        <td><span class="pill LEMMA">L</span> <b>${esc(e.symbolId)}</b>${e.narrowed?' <span class="muted">已缩片</span>':""}</td>
+        <td><span class="pill ${e.reason}">${e.reason}</span></td>
+        <td class="mono muted" style="font-size:11px">${e.sliceDependencies.join(", ")}</td>
+        <td><span class="pill ${e.status}">${e.status}</span></td>
+        <td>${e.status==="FAILED"
+          ? `<button class="ghost" onclick="narrow('${e.symbolId}', ${JSON.stringify(e.sliceDependencies).replaceAll('"','&quot;')})">缩小证明依赖切片</button>`
+          : '<span class="muted">—</span>'}</td>
+      </tr>`;
+    }
+    html += `</tbody></table></div>`;
+  }
+  if (batches.length) {
+    html += `<details><summary>已发布批次证据（${batches.length}）</summary><div class="scroll">`;
+    for (const b of batches.filter(b=>b.planVersion===v.version)) {
+      html += `<div style="margin:6px 0;padding:6px;border:1px solid var(--line);border-radius:6px">
+        <b>${b.batchId}</b> · 层 ${b.layer} · ${b.submittedAt}
+        <pre>${esc(JSON.stringify(b.results, null, 2))}</pre></div>`;
+    }
+    html += `</div></details>`;
+  }
+  $("planArea").innerHTML = html;
+}
+
+async function submitLayer(layer, status) {
+  const v = currentStatus;
+  const entries = v.entries.filter(e=>e.layer===layer);
+  const results = entries.map((e,i)=>({
+    symbolId: e.symbolId,
+    status,
+    usedDependencies: e.sliceDependencies,
+    evidence: {
+      prover: "offline-replay-1.0",
+      certificate: `${currentPlan.planId}-v${v.version}-L${layer}:${e.symbolId}:${status}`,
+      checksum: "sha256:" + (e.symbolId + status + v.version + layer + i),
+      checkedAt: new Date().toISOString(),
+      detail: status==="FAILED" ? "simulated replay failure for slice narrowing demo" : "replay verified against declared slice",
+    },
+  }));
+  try {
+    const b = await api(`/api/plans/${currentPlan.planId}/batches`,
+      {method:"POST", body: JSON.stringify({planVersion: v.version, layer, results})});
+    toast(`批次 ${b.batchId} 已发布（${b.symbolIds.length} 个定理）`);
+    await refresh();
+  } catch(e) { toast(e.message, false); }
+}
+
+async function narrow(symbolId, currentSlice) {
+  if (currentSlice.length <= 1) { toast("切片已无法进一步缩小", false); return; }
+  const keep = currentSlice.slice(0, currentSlice.length - 1);
+  const input = prompt(`为 ${symbolId} 输入缩小后的切片（JSON 数组，必须是当前切片子集）`,
+    JSON.stringify(keep));
+  if (input === null) return;
+  let wanted;
+  try { wanted = JSON.parse(input); } catch(e) { toast("JSON 解析失败", false); return; }
+  try {
+    const nv = await api(`/api/plans/${currentPlan.planId}/narrow`, {method:"POST",
+      body: JSON.stringify({planVersion: currentStatus.version, symbolId, sliceDependencies: wanted})});
+    toast(`切片已缩小，生成计划版本 v${nv.version}`);
+    await refresh();
+    $("versionSel").value = String(nv.version);
+    await renderVersion();
+  } catch(e) { toast(e.message, false); }
+}
+
+async function freezePlan() {
+  try {
+    const v = await api(`/api/plans/${currentPlan.planId}/freeze`,
+      {method:"POST", body: JSON.stringify({planVersion: Number($("versionSel").value), note:"frozen from web UI"})});
+    toast(`版本 v${v.version} 已冻结`);
+    await refresh();
+  } catch(e) { toast(e.message, false); }
+}
+
+async function renderAudits() {
+  const sel = snapshots[$("graphSnap")?.selectedIndex ?? 0] || snapshots[snapshots.length-1];
+  if (!sel) { $("audits").innerHTML='<span class="muted">先导入快照</span>'; return; }
+  const items = await api(`/api/snapshots/${sel.snapshotFingerprint}/external-axioms`);
+  if (!items.length) { $("audits").innerHTML='<span class="muted">该快照无外部公理</span>'; return; }
+  $("audits").innerHTML = `<table><tbody>${items.map(a=>`
+    <tr><td><b>${esc(a.symbolId)}</b><br><span class="pill ${a.status}">${a.status}</span>
+      <div class="muted">${a.reviewer ? esc(a.reviewer)+" · "+esc(a.note||"") : "未审核"}</div></td>
+    <td style="text-align:right;white-space:nowrap">
+      <button class="ghost" onclick="audit('${a.symbolId}','${sel.snapshotFingerprint}','APPROVED')">通过</button><br>
+      <button class="ghost" onclick="audit('${a.symbolId}','${sel.snapshotFingerprint}','REJECTED')">拒绝</button>
+    </td></tr>`).join("")}</tbody></table>`;
+}
+
+async function audit(symbolId, fp, status) {
+  const reviewer = prompt("审核人", "reviewer@formal") || "reviewer@formal";
+  const note = prompt("审核备注", status==="APPROVED" ? "trusted external source" : "insufficient provenance") || "";
+  try {
+    await api("/api/audits", {method:"POST", body: JSON.stringify({
+      snapshotFingerprint: fp, symbolId, status, reviewer, note})});
+    toast("审核决策已作为不可覆盖事件保留");
+    renderAudits(); loadEvents();
+  } catch(e) { toast(e.message, false); }
+}
+
+async function loadEvents() {
+  const events = await api("/api/events");
+  $("eventsArea").innerHTML = events.map(e=>`
+    <details style="margin-bottom:4px">
+      <summary><span class="mono muted">#${e.seq}</span> <b>${e.type}</b> <span class="muted">${e.at}</span></summary>
+      <pre>${esc(JSON.stringify(e.payload, null, 2))}</pre>
+    </details>`).join("") || '<span class="muted">暂无事件</span>';
+}
+async function drawGraph() {
+  const sel = $("graphSnap");
+  if (!snapshots.length || !sel.value) return;
+  const fp = sel.value;
+  currentGraph = await api(`/api/snapshots/${fp}/graph`);
+  const g = currentGraph;
+
+  const showingTarget = currentStatus &&
+    $("graphSnap").value === currentStatus.toSnapshotFingerprint;
+  const changed = new Set(showingTarget ? currentStatus.changedSymbols : []);
+  let affected = new Set();
+  if (showingTarget) {
+    affected = new Set();
+    const byId = Object.fromEntries(g.nodes.map(n=>[n.id,n]));
+    const rev = {};
+    g.edges.forEach(e=> (rev[e.to] ||= []).push(e.from));
+    const q = [...changed];
+    while(q.length){ const x=q.shift(); if(affected.has(x))continue; affected.add(x);
+      (rev[x]||[]).forEach(y=>q.push(y)); }
+  }
+
+  const depths = {};
+  g.nodes.forEach(n => depths[n.depth] = (depths[n.depth]||0)+1);
+  const layerNodes = {};
+  const colW = 210, rowH = 58, padX = 30, padY = 30;
+  const width = Math.max(...Object.keys(depths).map(Number)) * colW + 260;
+  const maxRows = Math.max(...Object.values(depths));
+  const height = maxRows * rowH + 60;
+  const pos = {};
+  g.nodes.forEach(n=>{
+    const idx = (layerNodes[n.depth] ||= []).length;
+    layerNodes[n.depth].push(n.id);
+    pos[n.id] = {x: padX + n.depth*colW, y: padY + idx*rowH};
+  });
+
+  let svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
+    <defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L7,3 L0,6 Z" fill="#3a475c"/></marker></defs>`;
+  for (const e of g.edges) {
+    const a = pos[e.from], b = pos[e.to];
+    const hot = affected.has(e.from) && affected.has(e.to);
+    svg += `<path class="edge ${hot?"hot":""}" d="M${a.x},${a.y+13} C${a.x-40},${a.y+13} ${b.x+150},${b.y+13} ${b.x+148},${b.y+13}"/>`;
+  }
+  for (const n of g.nodes) {
+    const p = pos[n.id];
+    const cls = `node ${n.kind} ${changed.has(n.id)?"changed":""} ${affected.has(n.id)&&!changed.has(n.id)?"affected":""}`;
+    const label = n.id + (n.recursive ? " ⟲" : "") + (n.external ? " ⚠ext" : "");
+    svg += `<g class="${cls}"><rect x="${p.x}" y="${p.y}" width="150" height="28" rx="6"/>
+      <text x="${p.x+8}" y="${p.y+18}">${esc(label)}</text></g>`;
+  }
+  svg += `</svg>`;
+  $("graphWrap").innerHTML = svg;
+
+  const legal = g.sccs.filter(s=>{
+    const cyclic = s.ids.length>1 || g.edges.some(e=>e.from===s.ids[0]&&e.to===s.ids[0]);
+    return cyclic;
+  });
+  $("sccInfo").innerHTML = legal.length
+    ? legal.map(s=>`<div class="${s.legal?"ok-text":"err-text"}">SCC #${s.index} ${s.legal?"✔ 合法":"✘ 非法拒绝"}
+        [${s.ids.join(", ")}] — ${esc(s.reason)}</div>`).join("")
+    : '<div>无环（每个分量都是单点）。</div>';
+}
+
+(async function init(){
+  try { await refresh(); }
+  catch(e) { toast("初始化失败: "+e.message, false); }
+})();
+</script>
+</body>
+</html>

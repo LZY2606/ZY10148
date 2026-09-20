@@ -1,0 +1,140 @@
+{
+  "library": "tiny-arith",
+  "version": "v1",
+  "symbols": [
+    {
+      "id": "nat",
+      "kind": "DEFINITION",
+      "library": "tiny-arith",
+      "version": "v1",
+      "fingerprint": "0a0a0a0a0001",
+      "content": "Inductive nat : Type := | O | S (n : nat).",
+      "doc": "Natural numbers.",
+      "dependencies": []
+    },
+    {
+      "id": "zero",
+      "kind": "DEFINITION",
+      "library": "tiny-arith",
+      "version": "v1",
+      "fingerprint": "0b0b0b0b0001",
+      "content": "Definition zero : nat := O.",
+      "doc": "The constant zero.",
+      "dependencies": ["nat"]
+    },
+    {
+      "id": "succ",
+      "kind": "DEFINITION",
+      "library": "tiny-arith",
+      "version": "v1",
+      "fingerprint": "0c0c0c0c0001",
+      "content": "Definition succ (n : nat) : nat := S n.",
+      "doc": "Successor.",
+      "dependencies": ["nat"]
+    },
+    {
+      "id": "add",
+      "kind": "DEFINITION",
+      "library": "tiny-arith",
+      "version": "v1",
+      "fingerprint": "0d0d0d0d0001",
+      "content": "Fixpoint add (n m : nat) : nat := match n with | O => m | S k => S (add k m) end.",
+      "doc": "Primitive recursion addition.",
+      "dependencies": ["nat", "zero", "succ"],
+      "recursive": true
+    },
+    {
+      "id": "even",
+      "kind": "DEFINITION",
+      "library": "tiny-arith",
+      "version": "v1",
+      "fingerprint": "0e0e0e0e0001",
+      "content": "Fixpoint even (n : nat) : Prop := match n with | O => True | S k => odd k end.",
+      "doc": "Mutually recursive even/odd (legal declared cycle).",
+      "dependencies": ["nat", "zero", "succ", "odd"],
+      "recursive": true
+    },
+    {
+      "id": "odd",
+      "kind": "DEFINITION",
+      "library": "tiny-arith",
+      "version": "v1",
+      "fingerprint": "0f0f0f0f0001",
+      "content": "Fixpoint odd (n : nat) : Prop := match n with | O => False | S k => even k end.",
+      "doc": "Mutually recursive even/odd (legal declared cycle).",
+      "dependencies": ["nat", "succ", "even"],
+      "recursive": true
+    },
+    {
+      "id": "peano_induction",
+      "kind": "AXIOM",
+      "library": "tiny-arith",
+      "version": "v1",
+      "fingerprint": "a1b2c3d40001",
+      "content": "Axiom peano_induction : forall P : nat -> Prop, P O -> (forall n, P n -> P (S n)) -> forall n, P n.",
+      "doc": "Structural induction principle.",
+      "dependencies": ["nat", "zero", "succ"]
+    },
+    {
+      "id": "classic_excluded_middle",
+      "kind": "AXIOM",
+      "library": "coq-classic",
+      "version": "v1",
+      "fingerprint": "f0f0f0f00001",
+      "content": "Axiom classic : forall P : Prop, P \\/ ~P.",
+      "doc": "External classical axiom, requires human audit.",
+      "dependencies": ["nat"],
+      "external": true
+    },
+    {
+      "id": "add_zero",
+      "kind": "LEMMA",
+      "library": "tiny-arith",
+      "version": "v1",
+      "fingerprint": "111111111111",
+      "content": "Lemma add_zero : forall n, add n O = n. Proof. induction n; auto. Qed.",
+      "doc": "Zero is a right identity.",
+      "dependencies": ["add", "zero", "nat", "peano_induction"]
+    },
+    {
+      "id": "add_succ",
+      "kind": "LEMMA",
+      "library": "tiny-arith",
+      "version": "v1",
+      "fingerprint": "222222222222",
+      "content": "Lemma add_succ : forall n m, add n (S m) = S (add n m). Proof. induction n; simpl; auto. Qed.",
+      "doc": "Addition commutes with successor.",
+      "dependencies": ["add", "succ", "zero", "nat"]
+    },
+    {
+      "id": "add_comm",
+      "kind": "LEMMA",
+      "library": "tiny-arith",
+      "version": "v1",
+      "fingerprint": "333333333331",
+      "content": "Lemma add_comm : forall n m, add n m = add m n. Proof. induction n; simpl; rewrite add_zero; auto. Qed.",
+      "doc": "Commutativity of addition.",
+      "dependencies": ["add", "add_zero", "add_succ", "peano_induction"]
+    },
+    {
+      "id": "even_or_odd",
+      "kind": "LEMMA",
+      "library": "tiny-arith",
+      "version": "v1",
+      "fingerprint": "444444444441",
+      "content": "Lemma even_or_odd : forall n, even n \\/ odd n. Proof. induction n using peano_induction; apply classic; auto. Qed.",
+      "doc": "Every number is even or odd (uses external classic axiom).",
+      "dependencies": ["even", "odd", "zero", "succ", "nat", "peano_induction", "classic_excluded_middle"]
+    },
+    {
+      "id": "double_even",
+      "kind": "LEMMA",
+      "library": "tiny-arith",
+      "version": "v1",
+      "fingerprint": "555555555551",
+      "content": "Lemma double_even : forall n, even (add n n). Proof. induction n; simpl; rewrite add_zero; auto. Qed.",
+      "doc": "Doubling yields an even number; unaffected by v2 changes.",
+      "dependencies": ["even", "add", "add_zero", "zero"]
+    }
+  ]
+}
